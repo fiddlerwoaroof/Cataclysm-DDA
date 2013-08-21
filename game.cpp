@@ -11,6 +11,7 @@
 #include "auto_pickup.h"
 #include "mapbuffer.h"
 #include "debug.h"
+#include "editmap.h"
 #include "bodypart.h"
 #include "map.h"
 #include "output.h"
@@ -88,21 +89,20 @@ game::game() :
  init_fields();
  init_faction_data();
  init_morale();
- init_traits();
  init_skills();
  init_professions();
  init_bionics();              // Set up bionics                   (SEE bionics.cpp)
+ init_mtypes();	              // Set up monster types             (SEE mtypedef.cpp)
  init_itypes();	              // Set up item types                (SEE itypedef.cpp)
  SNIPPET.load();
  item_controller->init(this); //Item manager
- init_mtypes();	              // Set up monster types             (SEE mtypedef.cpp)
  init_monitems();             // Set up the items monsters carry  (SEE monitemsdef.cpp)
  init_traps();                // Set up the trap types            (SEE trapdef.cpp)
  init_recipes();              // Set up crafting reciptes         (SEE crafting.cpp)
  init_mongroups();            // Set up monster groupings         (SEE mongroupdef.cpp)
  init_missions();             // Set up mission templates         (SEE missiondef.cpp)
  init_construction();         // Set up constructables            (SEE construction.cpp)
- init_mutations();
+ init_traits_mutations();
  init_vehicles();             // Set up vehicles                  (SEE veh_typedef.cpp)
  init_autosave();             // Set up autosave
  init_diseases();             // Set up disease lookup table
@@ -419,6 +419,9 @@ void game::start_game()
  //Put some NPCs in there!
  create_starting_npcs();
 
+ //Create mutation_category_level
+ u.set_highest_cat_level();
+
  MAPBUFFER.set_dirty();
 
  u.add_memorial_log(_("%s began their journey into the Cataclysm."), u.name.c_str());
@@ -620,11 +623,11 @@ bool game::do_turn()
     }
 
  if (turn % 50 == 0) {	// Hunger, thirst, & fatigue up every 5 minutes
-  if ((!u.has_trait(PF_LIGHTEATER) || !one_in(3)) &&
+  if ((!u.has_trait("LIGHTEATER") || !one_in(3)) &&
       (!u.has_bionic("bio_recycler") || turn % 300 == 0))
    u.hunger++;
   if ((!u.has_bionic("bio_recycler") || turn % 100 == 0) &&
-      (!u.has_trait(PF_PLANTSKIN) || !one_in(5)))
+      (!u.has_trait("PLANTSKIN") || !one_in(5)))
    u.thirst++;
   u.fatigue++;
   if (u.fatigue == 192 && !u.has_disease("lying_down") &&
@@ -652,13 +655,13 @@ bool game::do_turn()
   else if (u.pain < 0)
    u.pain++;
 // Mutation healing effects
-  if (u.has_trait(PF_FASTHEALER2) && one_in(5))
+  if (u.has_trait("FASTHEALER2") && one_in(5))
    u.healall(1);
-  if (u.has_trait(PF_REGEN) && one_in(2))
+  if (u.has_trait("REGEN") && one_in(2))
    u.healall(1);
-  if (u.has_trait(PF_ROT2) && one_in(5))
+  if (u.has_trait("ROT2") && one_in(5))
    u.hurtall(1);
-  if (u.has_trait(PF_ROT3) && one_in(2))
+  if (u.has_trait("ROT3") && one_in(2))
    u.hurtall(1);
 
   if (u.radiation > 1 && one_in(3))
@@ -674,8 +677,8 @@ bool game::do_turn()
  update_weather();
 
 // The following happens when we stay still; 10/40 minutes overdue for spawn
- if ((!u.has_trait(PF_INCONSPICUOUS) && turn > nextspawn +  100) ||
-     ( u.has_trait(PF_INCONSPICUOUS) && turn > nextspawn +  400)   ) {
+ if ((!u.has_trait("INCONSPICUOUS") && turn > nextspawn +  100) ||
+     ( u.has_trait("INCONSPICUOUS") && turn > nextspawn +  400)   ) {
   spawn_mon(-1 + 2 * rng(0, 1), -1 + 2 * rng(0, 1));
   nextspawn = turn;
  }
@@ -3889,7 +3892,9 @@ void game::draw_ter(int posx, int posy)
    z[i].draw(w_terrain, posx, posy, false);
    mapRain[VIEWY + z[i].posy - posy][VIEWX + z[i].posx - posx] = false;
   } else if (z[i].has_flag(MF_WARM) && distx <= VIEWX && disty <= VIEWY &&
-           (u.has_active_bionic("bio_infrared") || u.has_trait(PF_INFRARED)))
+           (u.has_active_bionic("bio_infrared") || u.has_trait("INFRARED")) &&
+             m.pl_sees(u.posx,u.posy,z[i].posx,z[i].posy,
+                       u.sight_range(DAYLIGHT_LEVEL)))
    mvwputch(w_terrain, VIEWY + z[i].posy - posy, VIEWX + z[i].posx - posx,
             c_red, '?');
  }
@@ -3927,10 +3932,10 @@ void game::refresh_all()
 {
  m.reset_vehicle_cache();
  draw();
- draw_minimap();
  draw_HP();
  wrefresh(w_messages);
  refresh();
+ draw_minimap();
 }
 
 void game::draw_HP()
@@ -3985,7 +3990,7 @@ void game::draw_HP()
           health_bar = "-----";
         }
         wmove(w_HP, i * dy + hpy, hpx);
-        if (u.has_trait(PF_SELFAWARE)) {
+        if (u.has_trait("SELFAWARE")) {
             wprintz(w_HP, color, "%3d  ", current_hp);
         } else {
             wprintz(w_HP, color, health_bar.c_str());
@@ -4366,7 +4371,7 @@ bool game::u_see(player *p)
 bool game::u_see(monster *mon)
 {
  int dist = rl_dist(u.posx, u.posy, mon->posx, mon->posy);
- if (u.has_trait(PF_ANTENNAE) && dist <= 3)
+ if (u.has_trait("ANTENNAE") && dist <= 3)
   return true;
  if (mon->has_flag(MF_DIGS) && !u.has_active_bionic("bio_ground_sonar") &&
      dist > 1)
@@ -4833,16 +4838,16 @@ bool game::sound(int x, int y, int vol, std::string description)
 
  if (u.has_bionic("bio_ears"))
   vol *= 3.5;
- if (u.has_trait(PF_BADHEARING))
+ if (u.has_trait("BADHEARING"))
   vol *= .5;
- if (u.has_trait(PF_CANINE_EARS))
+ if (u.has_trait("CANINE_EARS"))
   vol *= 1.5;
  int dist = rl_dist(x, y, u.posx, u.posy);
  if (dist > vol)
   return false;	// Too far away, we didn't hear it!
  if (u.has_disease("sleep") &&
-     ((!u.has_trait(PF_HEAVYSLEEPER) && dice(2, 20) < vol - dist) ||
-      ( u.has_trait(PF_HEAVYSLEEPER) && dice(3, 20) < vol - dist)   )) {
+     ((!u.has_trait("HEAVYSLEEPER") && dice(2, 20) < vol - dist) ||
+      ( u.has_trait("HEAVYSLEEPER") && dice(3, 20) < vol - dist)   )) {
   u.rem_disease("sleep");
   if (description != "alarm_clock")
    add_msg(_("You're woken up by a noise."));
@@ -4904,7 +4909,7 @@ void game::add_footstep(int x, int y, int volume, int distance, monster* source)
   err_offset = 1;
  if (u.has_bionic("bio_ears"))
   err_offset--;
- if (u.has_trait(PF_BADHEARING))
+ if (u.has_trait("BADHEARING"))
   err_offset++;
 
  int origx = x, origy = y;
@@ -5495,12 +5500,12 @@ void game::knockback(std::vector<point>& traj, int force, int stun, int dam_mult
 
 void game::use_computer(int x, int y)
 {
- if (u.has_trait(PF_ILLITERATE)) {
+ if (u.has_trait("ILLITERATE")) {
   add_msg(_("You can not read a computer screen!"));
   return;
  }
 
- if (u.has_trait(PF_HYPEROPIC) && !u.is_wearing("glasses_reading")
+ if (u.has_trait("HYPEROPIC") && !u.is_wearing("glasses_reading")
      && !u.is_wearing("glasses_bifocal")) {
   add_msg(_("You'll need to put on reading glasses before you can see the screen."));
   return;
@@ -6243,7 +6248,6 @@ void game::exam_vehicle(vehicle &veh, int examx, int examy, int cx, int cy)
         u.moves = 0;
     }
     refresh_all();
-    draw_minimap(); // TODO: Figure out why this is necessary.
 }
 
 // A gate handle is adjacent to a wall section, and next to that wall section on one side or
@@ -6857,6 +6861,16 @@ int advanced_inv_getinvcat(item *it) {
     return 9;
 }
 
+std::string center_text(const char *str, int width)
+{
+    std::string spaces;
+    int numSpaces = width - strlen(str);
+    for (int i = 0; i < numSpaces / 2; i++) {
+        spaces += " ";
+    }
+    return spaces + std::string(str);
+}
+
 void game::advanced_inv()
 {
     u.inv.sort();
@@ -6938,6 +6952,7 @@ void game::advanced_inv()
     int src = left; // the active screen , 0 for left , 1 for right.
     int dest = right;
     int max_inv = inv_chars.size() - u.worn.size() - ( u.is_armed() || u.weapon.is_style() ? 1 : 0 );
+    bool examineScroll = false;
 
     while(!exit)
     {
@@ -7158,9 +7173,12 @@ void game::advanced_inv()
             }
         }
 
-        wrefresh(head);
+        if (!examineScroll) {
+            wrefresh(head);
+            wrefresh(panes[right].window);
+        }
         wrefresh(panes[left].window);
-        wrefresh(panes[right].window);
+        examineScroll = false;
 
         int changex = -1;
         int changey = 0;
@@ -7516,10 +7534,12 @@ void game::advanced_inv()
             } else {
                 std::vector<iteminfo> vThisItem, vDummy, vMenu;
                 it->info(true, &vThisItem, this);
-                vThisItem.push_back(iteminfo(_("DESCRIPTION"), "\n----------\n"));
-                vThisItem.push_back(iteminfo(_("DESCRIPTION"), _("\n\n\n\n\n [up / page up] previous\n [down / page down] next")));
+                int rightWidth = w_width / 2 - 2;
+                vThisItem.push_back(iteminfo(_("DESCRIPTION"), "\n"));
+                vThisItem.push_back(iteminfo(_("DESCRIPTION"), center_text(_("[up / page up] previous"), rightWidth - 4)));
+                vThisItem.push_back(iteminfo(_("DESCRIPTION"), center_text(_("[down / page down] next"), rightWidth - 4)));
                 ret=compare_split_screen_popup( 1 + colstart + ( src == isinventory ? w_width/2 : 0 ),
-                    (w_width/2)-2, 0, it->tname(this), vThisItem, vDummy );
+                    rightWidth, 0, it->tname(this), vThisItem, vDummy );
             }
             if ( ret == KEY_NPAGE || ret == KEY_DOWN ) {
                 changey += 1;
@@ -7528,6 +7548,7 @@ void game::advanced_inv()
                 changey += -1;
                 lastCh='e';
             }
+            if (changey) { examineScroll = true; }
             redraw = true;
         }
         else if( 'q' == c || KEY_ESCAPE == c || ' ' == c )
@@ -7648,396 +7669,12 @@ void game::peek()
 }
 ////////////////////////////////////////////////////////////////////////////////////////////
 point game::look_debug(point coords) {
-  draw_ter();
-  int lx = u.posx + u.view_offset_x, ly = u.posy + u.view_offset_y;
-
-  int mx, my;
-  int ch;
-  int nextch=0;
-  InputEvent input;
-
-  std::string padding=std::string(46,' ');
-
-  const int lookHeight=TERMY-12+VIEW_OFFSET_Y;
-  WINDOW* w_look = newwin(lookHeight+1, 48, 12+VIEW_OFFSET_Y, VIEWX * 2 + 8+VIEW_OFFSET_X);
-  wborder(w_look, LINE_XOXO, LINE_XOXO, LINE_OXOX, LINE_OXOX,
-                  LINE_OXXO, LINE_OOXX, LINE_XXOO, LINE_XOOX );
-  mvwprintz(w_look, 1, 1, c_white, _("Looking Around"));
-  wrefresh(w_look);
-  bool skip=false;
-
-  int pter=-1;
-/* variables used by currently inactive debug code.
-  int fsel=-1;
-  int fset=-1;
-*/
-  int trsel=-1;
-  int trset=-1;
-  do {
-    if (nextch!=0) {
-      ch=nextch;
-      nextch=0;skip=false;
-      if(ch) input = get_input(ch);
-    } else if ( skip ) {
-      skip = false;
-      input=Nothing;
-      ch=0;
-    } else {
-      ch=(int)getch();
-      if(ch) input = get_input(ch);
-    }
-    get_direction(mx, my, input);
-    if (mx != -2 && my != -2) {	// Directional key pressed
-      lx += mx;
-      ly += my;
-    }
-
-    werase(w_terrain);
-    draw_ter(lx, ly);
-    mvwprintz(w_look, 0, 2 ,c_ltgray, "< %d,%d >",lx,ly);
-    for (int i = 1; i < lookHeight; i++) {
-      mvwprintz(w_look, i, 1, c_white, padding.c_str());
-    }
-
-    // Debug helper 2, child of debug helper
-    int veh_part = 0;
-    vehicle *veh = m.veh_at(lx, ly, veh_part);
-    int veh_in=-1;
-    if(veh) veh_in=veh->is_inside(veh_part);
-
-    int off=1;
-    int boff=lookHeight-1;
-
-    int tter=m.ter(lx, ly);
-    ter_t terrain_type = terlist[m.ter(lx, ly)];
-    furn_t furniture_type = furnlist[m.furn(lx, ly)];
-
-    mvwputch(w_look, off, 2, terrain_type.color, terrain_type.sym);
-    mvwprintw(w_look, off, 4, _("%d: %s; movecost %d"), m.ter(lx, ly),
-         terrain_type.name.c_str(),
-         terrain_type.movecost
-    );
-    off++; // 2
-
-    mvwputch(w_look, off, 2, furniture_type.color, furniture_type.sym);
-    mvwprintw(w_look, off, 4, _("%d: %s; movecost %d movestr %d"), m.furn(lx, ly),
-         furniture_type.name.c_str(),
-         furniture_type.movecost,
-         furniture_type.move_str_req
-    );
-    off++; // 3
-
-    mvwprintw(w_look, off, 2, _("dist: %d u_see: %d light: %d v_in: %d"), rl_dist(u.posx, u.posy, lx, ly), u_see(lx, ly), m.light_at(lx,ly), veh_in );
-    off++; // 3
-
-    std::string extras="";
-    if(veh_in >= 0) extras+=_(" [vehicle]");
-    if(m.has_flag(indoors, lx, ly)) extras+=_(" [indoors]");
-    if(m.has_flag(supports_roof, lx, ly)) extras+=_(" [roof]");
-
-    mvwprintw(w_look, off, 1, "%s %s", m.features(lx, ly).c_str(),extras.c_str());
-    off++;
-
-    field &curfield = m.field_at(lx, ly);
-    if (curfield.fieldCount() > 0) {
-		field_entry *cur = NULL;
-		for(std::map<field_id, field_entry*>::iterator field_list_it = curfield.getFieldStart(); field_list_it != curfield.getFieldEnd(); ++field_list_it){
-			cur = field_list_it->second;
-			if(cur == NULL) continue;
-			mvwprintz(w_look, off, 1, fieldlist[cur->getFieldType()].color[cur->getFieldDensity()-1], _("field: %s (%d) density %d age %d"),
-				fieldlist[cur->getFieldType()].name[cur->getFieldDensity()-1].c_str(), cur->getFieldType(), cur->getFieldDensity(), cur->getFieldAge()
-			);
-			off++; // 4ish
-		}
-    }
-
-    trap_id curtrap=m.tr_at(lx, ly);
-    if (curtrap != tr_null) {
-       mvwprintz(w_look, off, 1, traps[curtrap]->color, _("trap: %s (%d)"),
-           traps[curtrap]->name.c_str(), curtrap
-       );
-       off++; // 5
-    }
-
-    int dex = mon_at(lx, ly);
-    if (dex != -1) {
-        z[mon_at(lx, ly)].draw(w_terrain, lx, ly, true);
-        z[mon_at(lx, ly)].print_info(this, w_look);
-        off+=6;
-    } else if (npc_at(lx, ly) != -1) {
-        active_npc[npc_at(lx, ly)]->draw(w_terrain, lx, ly, true);
-        active_npc[npc_at(lx, ly)]->print_info(w_look);
-        off+=6;
-    } else if (veh) {
-        mvwprintw(w_look, off, 1, _("There is a %s there. Parts:"), veh->name.c_str());
-        off++;
-        veh->print_part_desc(w_look, off, 48, veh_part);
-        off+=6;
-        m.drawsq(w_terrain, u, lx, ly, true, true, lx, ly);
-    } else {
-        m.drawsq(w_terrain, u, lx, ly, true, true, lx, ly);
-    }
-
-    if (!m.has_flag(container, lx, ly) && m.i_at(lx, ly).size() > 0)
-    {
-        mvwprintw(w_look, off, 1, _("There is a %s there."),
-                  m.i_at(lx, ly)[0].tname(this).c_str()); off++;
-        if (m.i_at(lx, ly).size() > 1) {
-            mvwprintw(w_look, off, 1, _("There are %d other items there as well."),m.i_at(lx, ly).size()-1); off++;
-        }
-    }
-
-
-    if (m.graffiti_at(lx, ly).contents)
-      mvwprintw(w_look, off, 1, _("Graffiti: %s"), m.graffiti_at(lx, ly).contents->c_str()); off++;
-
-    mvwprintw(w_look, boff, 1, _("[t] add trap, [f] add field effect")); boff--;
-    mvwprintw(w_look, boff, 1, _("[g] edit m_ter")); boff--;
-
-    wrefresh(w_look);
-    wrefresh(w_terrain);
-
-    if(ch == 'g') {
-      ///////////////////////////////////////////
-      ///// tile edit
-      int pwh=TERMY;
-      int pww=48;
-      int pwy=0;
-      int pwx=VIEWX * 2 + 8+VIEW_OFFSET_X;
-
-      WINDOW* w_pickter = newwin(pwh, pww, pwy, pwx);
-      wborder(w_pickter, LINE_XOXO, LINE_XOXO, LINE_OXOX, LINE_OXOX,
-                 LINE_OXXO, LINE_OOXX, LINE_XXOO, LINE_XOOX );
-      wrefresh(w_pickter);
-
-      int pickh=pwh-2;
-      int pickw=pww-2;
-      int cur_t=0;
-
-      if( pter < 0 ) pter=tter;
-      int lastpter=pter;
-      int xmax=pickw; //int(pickw/2);
-      int ymax=int(num_terrain_types/xmax);
-      int subch=0;
-      point pterp=point(-1,-1);
-      point lastpterp=point(-1,-1);
-      point tterp=point(-1,-1);
-
-      do {
-            cur_t=0;
-            for (int y=2; y < pickh && cur_t < num_terrain_types; y+=2) {
-              for (int x=2; x < pickw && cur_t < num_terrain_types; x++,cur_t++) {
-
-                 ter_t ttype = terlist[cur_t];
-                 mvwputch(w_pickter, y, x, ttype.color, ttype.sym);
-
-                 if(cur_t == pter) {
-                    pterp=point(x,y);
-                 } else if(cur_t == lastpter) {
-                    lastpterp=point(x,y);
-                 } else if (cur_t == tter) {
-                    tterp=point(x,y);
-                 }
-              }
-            }
-
-            mvwputch(w_pickter, lastpterp.y+1, lastpterp.x-1, c_ltgreen, ' ');
-            mvwputch(w_pickter, lastpterp.y-1, lastpterp.x+1, c_ltgreen, ' ');
-            mvwputch(w_pickter, lastpterp.y+1, lastpterp.x+1, c_ltgreen, ' ');
-            mvwputch(w_pickter, lastpterp.y-1, lastpterp.x-1, c_ltgreen, ' ');
-
-            mvwputch(w_pickter, tterp.y+1, tterp.x, c_ltgray, '^');
-            mvwputch(w_pickter, tterp.y-1, tterp.x, c_ltgray, 'v');
-
-            mvwputch(w_pickter, pterp.y+1, pterp.x-1, c_ltgreen, LINE_XXOO);
-            mvwputch(w_pickter, pterp.y-1, pterp.x+1, c_ltgreen, LINE_OOXX);
-            mvwputch(w_pickter, pterp.y+1, pterp.x+1, c_ltgreen, LINE_XOOX);
-            mvwputch(w_pickter, pterp.y-1, pterp.x-1, c_ltgreen, LINE_OXXO);
-
-            wborder(w_pickter, LINE_XOXO, LINE_XOXO, LINE_OXOX, LINE_OXOX,
-                 LINE_OXXO, LINE_OOXX, LINE_XXOO, LINE_XOOX );
-
-            ter_t pttype = terlist[pter];
-
-            mvwprintz(w_pickter, 0, 2, c_white, "< %d: %s >-----------",pter,pttype.name.c_str());
-            int off=ymax*3;
-            for (int i=off;i < 3; i++) {
-              mvwprintw(w_pickter, i, 1, "%s",padding.c_str());
-            }
-              mvwprintz(w_pickter, off, 2, c_white, _("movecost %d"),pttype.movecost);
-              //mvwprintw(w_pickter, off+1, 2, "%s", m.features(lx, ly).c_str());
-              std::string extras="";
-              if(pttype.flags & mfb(indoors)) extras+=_("[indoors] ");
-              if(pttype.flags & mfb(supports_roof)) extras+=_("[roof] ");
-              mvwprintw(w_pickter, off+2, 2, "%s", extras.c_str());
-
-            wrefresh(w_pickter);
-            ///////////////////////
-            /// 0: 0 1 2 3
-            /// 1: 4 5 6 7
-            /// 3: 8 9
-            subch=(int)getch();
-            lastpter=pter;
-            if( subch == KEY_LEFT ) {
-                pter=(pter-1 >= 0 ? pter-1 : num_terrain_types - 1);
-            } else if( subch == KEY_RIGHT ) {
-                pter=(pter+1 < num_terrain_types ? pter+1 : 0 );
-            } else if( subch == KEY_UP ) {
-                pter=( pter-xmax+2 > 0 ? pter-xmax+2 : 0 );
-            } else if( subch == KEY_DOWN ) {
-                pter=( pter + xmax-2 < num_terrain_types ? pter+xmax-2 : num_terrain_types - 1);
-            } else if( subch == 't' ) {
-                nextch=subch;
-            }
-      } while (subch == KEY_UP || subch == KEY_DOWN || subch == KEY_LEFT || subch == KEY_RIGHT );
-
-      werase(w_pickter);
-      delwin(w_pickter);
-      refresh_all();
-      if( ( subch == KEY_ENTER || subch == '\n' || subch == 'g' ) && pter != tter) {
-          ter_t tset = terlist[pter];
-          m.ter_set(lx, ly, (ter_id)pter);
-      }
-      skip = true;
-
-
-    } else if ( ch == 'f' ) {
-      ///////////////////////////////////////////
-      ///// field edit
-		///This needs some serious rework for the new system. Disabled for now.
-      /*int pwh=lookHeight-1;int pww=48;int pwy=0;int pwx=VIEWX * 2 + 8+VIEW_OFFSET_X;
-      WINDOW* w_pickfield = newwin(pwh, pww, pwy, pwx);
-      wborder(w_pickfield, LINE_XOXO, LINE_XOXO, LINE_OXOX, LINE_OXOX,
-                 LINE_OXXO, LINE_OOXX, LINE_XXOO, LINE_XOOX );
-      int fmax=pwh-4;
-      int fshift=0;
-      int subch=0;
-      if ( fsel == -1 ) fsel=curfield.type;
-      std::string fids[num_fields];
-      fids[0]="-clear-";
-      fids[fd_fire_vent]="fire_vent";
-      fids[fd_push_items]="push_items";
-      fids[fd_shock_vent]="shock_vent";
-      fids[fd_acid_vent]="acid_vent";
-      do {
-        if( fsel < fshift ) {
-            fshift=fsel;
-        } else if ( fsel > fshift+fmax ) {
-            fshift=fsel-fmax;
-        }
-            field_t ftype;
-            std::string fnam;
-            for ( int f=fshift; f<=fshift+fmax; f++ ) {
-                  mvwprintz(w_pickfield, f+1-fshift, 1, c_white, "%s", padding.c_str());
-                  if ( f < num_fields ) {
-                      ftype = fieldlist[f];
-                      fnam = ( ftype.name[0].size() == 0 ? fids[f] : ftype.name[0] );
-                      mvwprintz(w_pickfield, f+1-fshift, 2, (fsel==f ? h_white : ( curfield.type == f ? c_green : c_ltgray ) ), "%d %s",f,fnam.c_str());
-                  }
-            }
-            wrefresh(w_pickfield);
-
-            subch=(int)getch();
-            if(subch==KEY_UP) {
-                fsel--;
-            } else if (subch==KEY_DOWN) {
-                fsel++;
-            }
-            if( fsel < 0 ) {
-                fsel = num_fields-1;
-            } else if ( fsel >= num_fields ) {
-                fsel = 0;
-            }
-
-      } while (subch == KEY_UP || subch == KEY_DOWN || subch == KEY_LEFT || subch == KEY_RIGHT );
-      if( ( subch == KEY_ENTER || subch == '\n' || subch == 'f' ) && curfield.type != fsel ) {
-            if ( fsel == 0 ) {
-                  fset=fsel;
-                  m.remove_field(lx, ly);
-            } else if ( fset < num_fields-1 ) {
-                  int num=uimenu(false,"density?","1","2","3","-cancel-",NULL);
-                  if(num<1 || num>3) {
-                      nextch='t';
-                  } else if ( curfield.type != fsel && num != curfield.density ) {
-                      fset=fsel;
-                      m.remove_field(lx, ly);
-                      m.add_field(this, lx, ly, field_id(fset), num);
-                  }
-            }
-      }
-      werase(w_pickfield);
-      wrefresh(w_pickfield);
-      delwin(w_pickfield);
-      wrefresh(w_look);
-      skip = true;
-	  */
-    } else if ( ch == 't' ) {
-      ///////////////////////////////////////////
-      ///// trap edit
-      int pwh=lookHeight-1;int pww=48;int pwy=0;int pwx=VIEWX * 2 + 8+VIEW_OFFSET_X;
-
-      WINDOW* w_picktrap = newwin(pwh, pww, pwy, pwx);
-      wborder(w_picktrap, LINE_XOXO, LINE_XOXO, LINE_OXOX, LINE_OXOX,
-                 LINE_OXXO, LINE_OOXX, LINE_XXOO, LINE_XOOX );
-      //
-      int tmax=pwh-4;
-      int tshift=0;
-      int subch=0;
-      if ( trsel == -1 ) trsel=curtrap;
-      std::string trids[num_trap_types];
-      trids[0]=_("-clear-");
-      do {
-        if( trsel < tshift ) {
-            tshift=trsel;
-        } else if ( trsel > tshift+tmax ) {
-            tshift=trsel-tmax;
-        }
-            std::string tnam;
-            for ( int t=tshift; t<=tshift+tmax; t++ ) {
-                  mvwprintz(w_picktrap, t+1-tshift, 1, c_white, "%s", padding.c_str());
-                  if ( t < num_trap_types ) {
-                      tnam = ( traps[t]->name.size() == 0 ? trids[t] : traps[t]->name );
-                      mvwputch(w_picktrap, t+1-tshift, 2, traps[t]->color, traps[t]->sym);
-                      mvwprintz(w_picktrap, t+1-tshift, 4, (trsel==t ? h_white : ( curtrap == t ? c_green : c_ltgray ) ), "%d %s", t, tnam.c_str() );
-                  }
-            }
-            wrefresh(w_picktrap);
-
-            subch=(int)getch();
-            if(subch==KEY_UP) {
-                trsel--;
-            } else if (subch==KEY_DOWN) {
-                trsel++;
-            }
-            if( trsel < 0 ) {
-                trsel = num_trap_types-1;
-            } else if ( trsel >= num_trap_types ) {
-                trsel = 0;
-            }
-
-      } while (subch == KEY_UP || subch == KEY_DOWN || subch == KEY_LEFT || subch == KEY_RIGHT );
-      if( ( subch == KEY_ENTER || subch == '\n' || subch == 't' ) && curtrap != trsel ) {
-          if ( trsel == 0 ) {
-              trset=trsel;
-              m.add_trap(lx, ly, trap_id(trset));
-          } else if ( trsel < num_trap_types-1 ) {
-              trset=trsel;
-              m.add_trap(lx, ly, trap_id(trset));
-          }
-      }
-      werase(w_picktrap);
-      wrefresh(w_picktrap);
-
-      delwin(w_picktrap);
-      wrefresh(w_look);
-      skip = true;
-      //
-    }
-  } while (input != Close && input != Cancel && input != Confirm);
-  if (input == Confirm) return point(lx, ly);
-  return point(-1, -1);
+  editmap * edit=new editmap(this);
+  point ret=edit->edit(coords);
+  delete edit;
+  edit=0;
+  return ret;
 }
-
 ////////////////////////////////////////////////////////////////////////////////////////////
 point game::look_around()
 {
@@ -9234,7 +8871,7 @@ void game::pickup(int posx, int posy, int min)
 }
 
 // Handle_liquid returns false if we didn't handle all the liquid.
-bool game::handle_liquid(item &liquid, bool from_ground, bool infinite)
+bool game::handle_liquid(item &liquid, bool from_ground, bool infinite, item *source)
 {
  if (!liquid.made_of(LIQUID)) {
   dbg(D_ERROR) << "game:handle_liquid: Tried to handle_liquid a non-liquid!";
@@ -9309,6 +8946,12 @@ bool game::handle_liquid(item &liquid, bool from_ground, bool infinite)
    }
    add_msg(_("Never mind."));
    return false;
+
+  } else if(cont == source) {
+
+    //Source and destination are the same; abort
+    add_msg(_("That's the same container!"));
+    return false;
 
   } else if (liquid.is_ammo() && (cont->is_tool() || cont->is_gun())) {
 // for filling up chainsaws, jackhammers and flamethrowers
@@ -9924,7 +9567,7 @@ void game::butcher()
 void game::complete_butcher(int index)
 {
  // corpses can disappear (rezzing!), so check for that
- if (m.i_at(u.posx, u.posy).size() <= index || m.i_at(u.posx, u.posy)[index].typeId() != "corpse") {
+ if (m.i_at(u.posx, u.posy).size() <= index || m.i_at(u.posx, u.posy)[index].corpse == NULL || m.i_at(u.posx, u.posy)[index].typeId() != "corpse" ) {
   add_msg(_("There's no corpse to butcher!"));
   return;
  }
@@ -10099,7 +9742,7 @@ void game::forage()
 void game::eat(char chInput)
 {
  char ch;
- if (u.has_trait(PF_RUMINANT) && m.ter(u.posx, u.posy) == t_underbrush &&
+ if (u.has_trait("RUMINANT") && m.ter(u.posx, u.posy) == t_underbrush &&
      query_yn(_("Eat underbrush?"))) {
   u.moves -= 400;
   u.hunger -= 10;
@@ -10326,7 +9969,7 @@ void game::unload(item& it)
             }
             if (content.made_of(LIQUID))
             {
-                if (!handle_liquid(content, false, false))
+                if (!handle_liquid(content, false, false, &it))
                 {
                     new_contents.push_back(content);// Put it back in (we canceled)
                 }
@@ -10727,8 +10370,8 @@ void game::plmove(int x, int y)
     u.recoil = int(u.recoil / 2);
    }
   }
-  if ((!u.has_trait(PF_PARKOUR) && m.move_cost(x, y) > 2) ||
-      ( u.has_trait(PF_PARKOUR) && m.move_cost(x, y) > 4    ))
+  if ((!u.has_trait("PARKOUR") && m.move_cost(x, y) > 2) ||
+      ( u.has_trait("PARKOUR") && m.move_cost(x, y) > 4    ))
   {
    if (veh1 && m.move_cost(x,y) != 2)
     add_msg(_("Moving past this %s is slow!"), veh1->part_info(vpart1).name);
@@ -10744,15 +10387,15 @@ void game::plmove(int x, int y)
   }
   if (m.has_flag(sharp, x, y) && !one_in(3) && !one_in(40 - int(u.dex_cur/2))
       && (!u.in_vehicle)) {
-   if (!u.has_trait(PF_PARKOUR) || one_in(4)) {
+   if (!u.has_trait("PARKOUR") || one_in(4)) {
     body_part bp = random_body_part();
     int side = rng(0, 1);
     if(u.hit(this, bp, side, 0, rng(1, 4)) > 0)
      add_msg(_("You cut your %s on the %s!"), body_part_name(bp, side).c_str(), m.tername(x, y).c_str());
    }
   }
-  if (!u.has_artifact_with(AEP_STEALTH) && !u.has_trait(PF_LEG_TENTACLES)) {
-   if (u.has_trait(PF_LIGHTSTEP))
+  if (!u.has_artifact_with(AEP_STEALTH) && !u.has_trait("LEG_TENTACLES")) {
+   if (u.has_trait("LIGHTSTEP"))
     sound(x, y, 2, "");	// Sound of footsteps may awaken nearby monsters
    else
     sound(x, y, 6, "");	// Sound of footsteps may awaken nearby monsters
@@ -11114,7 +10757,7 @@ void game::fling_player_or_monster(player *p, monster *zz, const int& dir, float
         {
             int dex_reduce = p->dex_cur < 4? 4 : p->dex_cur;
             dam1 = dam1 * 8 / dex_reduce;
-            if (p->has_trait(PF_PARKOUR))
+            if (p->has_trait("PARKOUR"))
             {
                 dam1 /= 2;
             }
@@ -11284,7 +10927,7 @@ void game::vertical_move(int movez, bool force)
  m.spawn_monsters(this);
 
  if (force) {	// Basically, we fell.
-  if (u.has_trait(PF_WINGS_BIRD))
+  if (u.has_trait("WINGS_BIRD"))
    add_msg(_("You flap your wings and flutter down gracefully."));
   else {
    int dam = int((u.str_max / 4) + rng(5, 10)) * rng(1, 3);//The bigger they are
