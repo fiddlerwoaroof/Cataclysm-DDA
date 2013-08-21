@@ -4175,6 +4175,70 @@
 },
 
 {
+  "result": "potasco",
+  "category": "CC_FOOD",
+  "skill_used": "cooking",
+  "difficulty": 2,
+  "time": 1000,
+  "reversible": false,
+  "autolearn": true,
+  "tools": [
+    [
+      [ "hotplate", 5 ],
+      [ "toolset", 1 ],
+      [ "fire", -1 ]
+    ],
+    [
+      [ "pot", -1 ],
+      [ "rock_pot", -1 ]
+    ]
+  ],
+  "components": [
+    [
+      [ "vinegar", 2 ]
+    ],
+    [
+      [ "jalapeno", 2 ],
+      [ "habanero", 1 ]
+    ]
+  ]
+},
+
+{
+  "result": "chili",
+  "category": "CC_FOOD",
+  "skill_used": "cooking",
+  "difficulty": 3,
+  "time": 10000,
+  "reversible": false,
+  "autolearn": true,
+  "tools": [
+    [
+      [ "hotplate", 5 ],
+      [ "toolset", 1 ],
+      [ "fire", -1 ]
+    ],
+    [
+      [ "pot", -1 ],
+      [ "rock_pot", -1 ]
+    ]
+  ],
+  "components": [
+    [
+      [ "broth", 2 ]
+    ],
+    [
+      [ "meat", 2 ]
+    ],
+    [
+      [ "potasco", 3 ],
+      [ "jalapeno", 2 ],
+      [ "habanero", 1 ]
+    ]
+  ]
+},
+
+{
   "result": "soup_veggy",
   "category": "CC_FOOD",
   "skill_used": "cooking",

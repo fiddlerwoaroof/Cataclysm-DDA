@@ -13,8 +13,9 @@
   },
   { "id":"field",
     "items":[
-      ["rock", 40],
-      ["strawberries", 2]
+      ["rock", 42],
+      ["strawberries", 3],
+      ["jalapeno", 2]
     ]
   },
   { "id":"forest",
@@ -24,7 +25,9 @@
       ["mushroom", 4],
       ["mushroom_poison", 3],
       ["mushroom_magic", 1],
-      ["blueberries", 3]
+      ["blueberries", 3],
+      ["jalapeno", 2],
+      ["habanero", 1]
     ]
   },
   { "id":"hive",
@@ -137,6 +140,7 @@
       ["funnel", 50],
       ["vac_sealer", 10],
       ["seasoning_italian", 25],
+      ["potasco", 25],
       ["cookbook_italian", 25],
       ["chips2", 65],
       ["chips3", 65],
@@ -151,6 +155,8 @@
       ["can_sardine", 14],
       ["can_tuna", 35],
       ["broth", 15],
+      ["chili", 15],
+      ["vinegar", 15],
       ["soup_veggy", 15],
       ["soup_meat", 15],
       ["spaghetti_raw", 40],
@@ -187,6 +193,8 @@
       ["mushroom", 4],
       ["blueberries", 3],
       ["strawberries", 2],
+      ["jalapeno", 3],
+      ["habanero", 2],
       ["tomato", 9],
       ["broccoli", 9],
       ["zucchini", 7],
@@ -592,6 +600,8 @@
       ["can_tuna", 35],
       ["can_catfood", 20],
       ["broth", 15],
+      ["vinegar", 15],
+      ["chili", 15],
       ["soup_veggy", 15],
       ["soup_meat", 15],
       ["flour", 20],
@@ -617,8 +627,11 @@
       ["lemon", 50],
       ["mushroom", 4],
       ["potato_raw", 10],
+      ["carrot", 3],
       ["blueberries", 3],
+      ["jalapeno", 3],
       ["strawberries", 2],
+      ["habanero", 2],
       ["tomato", 9],
       ["broccoli", 9],
       ["zucchini", 7],
